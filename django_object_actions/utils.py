@@ -49,7 +49,7 @@ class BaseDjangoObjectActions(object):
             'objectactions': [
                 self._get_tool_dict(action) for action in
                 self.get_change_actions(request, object_id, form_url)
-            ],
+                ],
             'tools_view_name': self.tools_view_name,
         }
         return super(BaseDjangoObjectActions, self).change_view(
@@ -60,7 +60,7 @@ class BaseDjangoObjectActions(object):
             'objectactions': [
                 self._get_tool_dict(action) for action in
                 self.get_changelist_actions(request)
-            ],
+                ],
             'tools_view_name': self.tools_view_name,
         }
         return super(BaseDjangoObjectActions, self).changelist_view(
@@ -87,7 +87,7 @@ class BaseDjangoObjectActions(object):
         """
         return self.change_actions
 
-    def get_changelist_actions(self, request):
+    def get_changelist_actions(self, request, queryset=None):
         """
         Override this to customize what actions get to the changelist view.
         """
@@ -123,6 +123,7 @@ class BaseDjangoObjectActions(object):
                     ChangeActionView.as_view(
                         model=self.model,
                         actions=actions,
+                        admin=self,
                         back='admin:%s_change' % base_url_name,
                     )
                 ),
@@ -133,6 +134,7 @@ class BaseDjangoObjectActions(object):
                     ChangeListActionView.as_view(
                         model=self.model,
                         actions=actions,
+                        admin=self,
                         back='admin:%s_changelist' % base_url_name,
                     )
                 ),
@@ -142,13 +144,18 @@ class BaseDjangoObjectActions(object):
 
     def _get_tool_dict(self, tool_name):
         """Represents the tool as a dict with extra meta."""
-        tool = getattr(self, tool_name)
+        if callable(tool_name):
+            tool = tool_name
+            tool_name = tool.__name__
+        else:
+            tool = getattr(self, tool_name)
         standard_attrs, custom_attrs = self._get_button_attrs(tool)
         return dict(
             name=tool_name,
             label=getattr(tool, 'label', tool_name),
             standard_attrs=standard_attrs,
             custom_attrs=custom_attrs,
+            method=tool,
         )
 
     def _get_button_attrs(self, tool):
@@ -205,6 +212,7 @@ class BaseActionView(View):
     back = None
     model = None
     actions = None
+    admin = None
 
     @property
     def view_args(self):
@@ -227,10 +235,14 @@ class BaseActionView(View):
         raise NotImplementedError
 
     def get(self, request, tool, **kwargs):
+        action_list = map(self.admin._get_tool_dict, self.get_actions(request, *self.view_args))
+        action_map = {action['name']: action for action in action_list}
+
         try:
-            view = self.actions[tool]
+            action_info = action_map[tool]
         except KeyError:
             raise Http404('Action does not exist')
+        view = action_info['method']
 
         ret = view(request, *self.view_args)
         if isinstance(ret, HttpResponseBase):
@@ -252,9 +264,12 @@ class BaseActionView(View):
 
 
 class ChangeActionView(SingleObjectMixin, BaseActionView):
+    def get_actions(self, request, obj):
+        return self.admin.get_change_actions(request, obj.id, form_url='')
+
     @property
     def view_args(self):
-        return (self.get_object(), )
+        return (self.get_object(),)
 
     @property
     def back_url(self):
@@ -262,9 +277,12 @@ class ChangeActionView(SingleObjectMixin, BaseActionView):
 
 
 class ChangeListActionView(MultipleObjectMixin, BaseActionView):
+    def get_actions(self, request, queryset):
+        return self.admin.get_changelist_actions(request, queryset, form_url='')
+
     @property
     def view_args(self):
-        return (self.get_queryset(), )
+        return (self.get_queryset(),)
 
     @property
     def back_url(self):
@@ -273,6 +291,7 @@ class ChangeListActionView(MultipleObjectMixin, BaseActionView):
 
 def takes_instance_or_queryset(func):
     """Decorator that makes standard Django admin actions compatible."""
+
     @wraps(func)
     def decorated_function(self, request, queryset):
         # func follows the prototype documented at:
@@ -290,4 +309,5 @@ def takes_instance_or_queryset(func):
                     model = queryset._meta.concrete_model
                 queryset = model.objects.filter(pk=queryset.pk)
         return func(self, request, queryset)
+
     return decorated_function
