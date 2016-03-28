@@ -46,7 +46,8 @@ class BaseDjangoObjectActions(object):
         urls = super(BaseDjangoObjectActions, self).get_urls()
         return self._get_action_urls() + urls
 
-    def change_view(self, request, object_id, form_url='', extra_context=None):
+
+    def _get_change_context(self, request, object_id, form_url=''):
         extra_context = {
             'objectactions': [
                 self._get_tool_dict(action) for action in
@@ -54,6 +55,12 @@ class BaseDjangoObjectActions(object):
                 ],
             'tools_view_name': self.tools_view_name,
         }
+        return extra_context
+
+
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        extra_context = self._get_change_context(request, object_id, form_url='')
         return super(BaseDjangoObjectActions, self).change_view(
             request, object_id, form_url, extra_context)
 
