@@ -13,6 +13,8 @@ from django.views.generic import View
 from django.views.generic.detail import SingleObjectMixin
 from django.views.generic.list import MultipleObjectMixin
 
+from django_object_actions.actions import BaseAction
+
 
 class BaseDjangoObjectActions(object):
     """
@@ -95,34 +97,32 @@ class BaseDjangoObjectActions(object):
 
     # INTERNAL METHODS
     ##################
-
-    def _get_action_urls(self):
-        """Get the url patterns that route each action to a view."""
-        actions = {}
-
+    def _get_base_url_name(self):
         try:
             model_name = self.model._meta.model_name
         except AttributeError:  # pragma: no cover
             # DJANGO15
             model_name = self.model._meta.module_name
-        # e.g.: polls_poll
         base_url_name = '%s_%s' % (self.model._meta.app_label, model_name)
+        return base_url_name
+
+    def _get_action_urls(self):
+        """Get the url patterns that route each action to a view."""
+        actions = {}
+
+        # e.g.: polls_poll
+        base_url_name = self._get_base_url_name()
         # e.g.: polls_poll_actions
         model_actions_url_name = '%s_actions' % base_url_name
 
         self.tools_view_name = 'admin:' + model_actions_url_name
 
-        # WISHLIST use get_change_actions and get_changelist_actions
-        # TODO separate change and changelist actions
-        for action in chain(self.change_actions, self.changelist_actions):
-            actions[action] = getattr(self, action)
-        return [
+        urls = [
             # change, supports pks that are numbers or uuids
             url(r'^(?P<pk>[0-9a-f\-]+)/actions/(?P<tool>\w+)/$',
                 self.admin_site.admin_view(  # checks permissions
                     ChangeActionView.as_view(
                         model=self.model,
-                        actions=actions,
                         admin=self,
                         back='admin:%s_change' % base_url_name,
                     )
@@ -133,7 +133,6 @@ class BaseDjangoObjectActions(object):
                 self.admin_site.admin_view(  # checks permissions
                     ChangeListActionView.as_view(
                         model=self.model,
-                        actions=actions,
                         admin=self,
                         back='admin:%s_changelist' % base_url_name,
                     )
@@ -142,21 +141,37 @@ class BaseDjangoObjectActions(object):
                 name=model_actions_url_name),
         ]
 
+        for action in chain(self.change_actions, self.changelist_actions):
+            if isinstance(action, BaseAction):
+                urls.extend(action.get_patterns(base_url_name, admin=self))
+        return urls
+
     def _get_tool_dict(self, tool_name):
         """Represents the tool as a dict with extra meta."""
-        if callable(tool_name):
+        url = None
+        if isinstance(tool_name, BaseAction):
+            tool = tool_name
+            tool_name = tool.get_url_name()
+            url = tool.get_url
+
+        elif callable(tool_name):
             tool = tool_name
             tool_name = tool.__name__
         else:
             tool = getattr(self, tool_name)
+
         standard_attrs, custom_attrs = self._get_button_attrs(tool)
-        return dict(
+
+
+        tool_data = dict(
             name=tool_name,
+            url=url,
             label=getattr(tool, 'label', tool_name),
             standard_attrs=standard_attrs,
             custom_attrs=custom_attrs,
             method=tool,
         )
+        return tool_data
 
     def _get_button_attrs(self, tool):
         """
@@ -213,6 +228,9 @@ class BaseActionView(View):
     model = None
     actions = None
     admin = None
+
+    def get_actions(self):
+        return self.actions or []
 
     @property
     def view_args(self):
