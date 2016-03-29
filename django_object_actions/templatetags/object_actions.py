@@ -20,9 +20,8 @@ def tool_url(context, tool, pk=None, tools_view_name=None):
     }
     if pk:
         url_kwargs['pk'] = pk
-
-    if 'url' in tool:
-        url = tool['url']
+    url = tool.get('url')
+    if url:
         if callable(url):
             url = url(**url_kwargs)
         return url

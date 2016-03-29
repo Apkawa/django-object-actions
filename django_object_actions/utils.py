@@ -96,7 +96,7 @@ class BaseDjangoObjectActions(object):
         """
         return self.change_actions
 
-    def get_changelist_actions(self, request, queryset=None):
+    def get_changelist_actions(self, request, queryset=None, form_url=''):
         """
         Override this to customize what actions get to the changelist view.
         """
@@ -113,6 +113,9 @@ class BaseDjangoObjectActions(object):
         base_url_name = '%s_%s' % (self.model._meta.app_label, model_name)
         return base_url_name
 
+    def _get_admin_namespace(self):
+        return self.admin_site.name
+
     def _get_action_urls(self):
         """Get the url patterns that route each action to a view."""
         actions = {}
@@ -122,7 +125,8 @@ class BaseDjangoObjectActions(object):
         # e.g.: polls_poll_actions
         model_actions_url_name = '%s_actions' % base_url_name
 
-        self.tools_view_name = 'admin:' + model_actions_url_name
+        namespace = self._get_admin_namespace()
+        self.tools_view_name = '%s:%s' % (namespace, model_actions_url_name)
 
         urls = [
             # change, supports pks that are numbers or uuids
@@ -131,7 +135,7 @@ class BaseDjangoObjectActions(object):
                     ChangeActionView.as_view(
                         model=self.model,
                         admin=self,
-                        back='admin:%s_change' % base_url_name,
+                        back='%s:%s_change' % (namespace, base_url_name),
                     )
                 ),
                 name=model_actions_url_name),
@@ -141,7 +145,7 @@ class BaseDjangoObjectActions(object):
                     ChangeListActionView.as_view(
                         model=self.model,
                         admin=self,
-                        back='admin:%s_changelist' % base_url_name,
+                        back='%s:%s_changelist' % (namespace, base_url_name),
                     )
                 ),
                 # Dupe name is fine. https://code.djangoproject.com/ticket/14259

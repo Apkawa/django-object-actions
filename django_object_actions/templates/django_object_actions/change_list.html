@@ -2,18 +2,6 @@
 
 
 {% block object-tools-items %}
-  {% for tool in objectactions %}
-    <li class="objectaction-item" data-tool-name="{{ tool.name }}">
-
-      <a href='{{ tool.url }}' title="{{ tool.standard_attrs.title }}"
-         {% for k, v in tool.custom_attrs.items %}
-           {{ k }}="{{ v }}"
-         {% endfor %}
-         class="{{ tool.standard_attrs.class }}">
-      {{ tool.label|capfirst }}
-      </a>
-
-    </li>
-  {% endfor %}
-  {{ block.super }}
+    {% include "django_object_actions/includes/list.html" %}
+    {{ block.super }}
 {% endblock %}
