@@ -109,8 +109,10 @@ class ViewAction(BaseAction):
         if isinstance(view_handler, six.string_types):
             view_handler = getattr(admin, view_handler)
 
-        if isinstance(view_handler, View):
-            view_handler = view_handler.as_view(admin=admin)
+        # Duck typing
+        as_view = getattr(view_handler, 'as_view', None)
+        if as_view and callable(as_view):
+            view_handler = as_view(admin=admin)
 
         if callable(self.view_params):
             view_params = self.view_params
